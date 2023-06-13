@@ -1,5 +1,4 @@
-# ESC1:
-Multicast.
+# ESC1: Multicast.
 
 Sender:
 
@@ -9,8 +8,7 @@ Receiver:
 
 cls && artemis-server-client.exe -batchmode -nographics 2 2 multicast nondurable user.login.test
 
-# ESC2:
-Anycast.
+# ESC2: Anycast.
 
 Sender:
 
@@ -20,8 +18,7 @@ Receiver:
 
 cls && artemis-server-client.exe -batchmode -nographics 2 2 anycast nondurable user.login.test2
 
-# ESC3:
-Wildcards.
+# ESC3: Wildcards.
 
 Sender:
 
