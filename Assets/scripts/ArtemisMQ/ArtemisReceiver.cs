@@ -9,46 +9,39 @@ namespace ArtemisMQ
         private IConsumer consumer = null;
         private ArtemisConnection connection = null;
 
-        public async Task CreateConsumerAsync(ConsumerConfiguration consumerConf, Action OnConsumerCreated)
+        public async Task ReceiveMessageAsync(bool messageAck, Action<Message> onMessageReceived)
         {
-            try
+            if (consumer != null)
             {
-                if (connection!= null && connection.IsConnected)
+                Message message = await consumer.ReceiveAsync();
+                if (message != null)
                 {
-                    await CreateProducerAsync(consumerConf);
-                    OnConsumerCreated?.Invoke();
+                    // Ack bool
+                    if (messageAck) await consumer.AcceptAsync(message);
+
+                    onMessageReceived?.Invoke(message);
                 }
-                else
-                {
-                    await CreateConnectionAsync();
-                    await CreateProducerAsync(consumerConf);
-                    OnConsumerCreated?.Invoke();
-                }
-            }
-            catch (Exception ex)
-            {
-                UnityEngine.Debug.Log(ex);
             }
         }
 
-        public async Task CreateConnectionAsync()
+        public async Task CreateConnectionAsync(Endpoint newEndpoint = null)
         {
             connection = new ArtemisConnection();
-            // We can configure the endpoint for different roles and uses
-            connection.ConfigureEndpoint();
+            if (newEndpoint != null) connection.ConfigureEndpoint(newEndpoint);
             await connection.OpenConnectionAsync();
         }
-        public async Task CreateProducerAsync(ConsumerConfiguration consumerConf)
+
+        public async Task CreateConsumerAsync(ConsumerConfiguration consumerConf)
         {
             consumer = await connection.GetConnection().CreateConsumerAsync(consumerConf);
         }
 
-        public async Task DeleteConsumerAndConnectionAsync(Action onConsumerDeleted)
+        public async Task DisposeConsumerAndConnectionAsync(Action onConsumerDeleted)
         {
             try
             {
-                await DeleteConsumerAsync();
-                await CloseConnectionAsync();
+                await DisposeConsumerAsync();
+                await DisposeConnectionAsync();
                 onConsumerDeleted?.Invoke();
             }
             catch (Exception ex)
@@ -57,29 +50,14 @@ namespace ArtemisMQ
             }
         }
 
-        public async Task DeleteConsumerAsync()
+        public async Task DisposeConsumerAsync()
         {
-            if (consumer != null)
-                await consumer.DisposeAsync();
+            if (consumer != null) await consumer.DisposeAsync();
         }
 
-        public async Task CloseConnectionAsync()
+        public async Task DisposeConnectionAsync()
         {
             await connection.CloseConnectionAsync();
-        }
-
-        public async Task ReceiveMessageAsync(Action<Message> onMessageReceived)
-        {
-            if (consumer != null)
-            { 
-                Message message = await consumer.ReceiveAsync();
-
-                if (message != null)
-                {
-                    // We do receive a new message to process!
-                    onMessageReceived?.Invoke(message);
-                }
-            }
         }
 
         /// <summary>
@@ -89,7 +67,7 @@ namespace ArtemisMQ
         /// <param name="queue">Queue for suscribe inside the address</param>
         /// <param name="rType">Routing type - Multicast by default (Anycast/Multicast)</param>
         /// <returns></returns>
-        public ConsumerConfiguration CreateConsumerConfiguration(string address, string queue, RoutingType rType = RoutingType.Multicast)
+        public static ConsumerConfiguration CreateConsumerConfiguration(string address, string queue = "", RoutingType rType = RoutingType.Multicast)
         {
             var consumerConfiguration = new ConsumerConfiguration();
             consumerConfiguration.Address = address;

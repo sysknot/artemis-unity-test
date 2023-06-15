@@ -5,40 +5,43 @@ using System;
 using ActiveMQ.Artemis.Client;
 
 /*
- 
-ESC#1:
-Multicast.
+    ESC#1:
+    Multicast.
 
-Sender:
-cls && artemis-server-client.exe -batchmode -nographics 1 5 multicast nondurable user.login.test
+    Sender:
+    cls && artemis-server-client.exe -batchmode -nographics sender 5 multicast nondurable noack user.login.test
 
-Receiver:
-cls && artemis-server-client.exe -batchmode -nographics 2 2 multicast nondurable user.login.test
+    Receiver:
+    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack user.login.test
 
-------------------------------------------------------------------------------
+    ------------------------------------------------------------------------------
 
-ESC#2:
-Anycast.
+    ESC#2:
+    Anycast.
 
-Sender:
-cls && artemis-server-client.exe -batchmode -nographics 1 5 anycast nondurable user.login.test2
+    Sender:
+    cls && artemis-server-client.exe -batchmode -nographics sender 5 anycast nondurable noack user.login.test2
 
 
-Receiver:
-cls && artemis-server-client.exe -batchmode -nographics 2 2 anycast nondurable user.login.test2
+    Receiver:
+    cls && artemis-server-client.exe -batchmode -nographics receiver 0 anycast nondurable noack user.login.test2
+    cls && artemis-server-client.exe -batchmode -nographics receiver 0 anycast nondurable ack user.login.test2
 
-------------------------------------------------------------------------------
+    cls && artemis-server-client.exe -batchmode -nographics receiver 2 anycast nondurable noack user.login.test2
+    cls && artemis-server-client.exe -batchmode -nographics receiver 2 anycast nondurable noack user.login.test2
 
-ESC#3:
-Wildcards.
+    ------------------------------------------------------------------------------
 
-Sender:
-cls && artemis-server-client.exe -batchmode -nographics 1 5 multicast nondurable user.login.test
+    ESC#3:
+    Wildcards.
 
-Receiver:
-cls && artemis-server-client.exe -batchmode -nographics 2 2 multicast nondurable *.login.test
-cls && artemis-server-client.exe -batchmode -nographics 2 2 multicast nondurable *.login.*
-cls && artemis-server-client.exe -batchmode -nographics 2 2 multicast nondurable #.test
+    Sender:
+    cls && artemis-server-client.exe -batchmode -nographics sender 5 multicast nondurable noack user.login.test
+
+    Receiver:
+    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack *.login.test
+    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack *.login.*
+    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack #.test
 
  */
 
@@ -53,10 +56,14 @@ namespace ArtemisMQ
         private int retrySecondsArg;
         private RoutingType routinTypegArg;
         private DurabilityMode durabilityModeArg;
+        private bool ackModeArg;
 
         private void Start()
         {
-            (sessionTypeArg, retrySecondsArg, addressArg, queueArg, routinTypegArg, durabilityModeArg) = ParseArguments();
+            (sessionTypeArg, retrySecondsArg, addressArg, queueArg, routinTypegArg, durabilityModeArg, ackModeArg) = ParseArguments();
+
+            ProducerConfiguration producerConf = ArtemisSender.CreateProducerConfiguration(addressArg, durabilityModeArg, routinTypegArg);
+            ConsumerConfiguration consumerConf = ArtemisReceiver.CreateConsumerConfiguration(addressArg, queueArg, routinTypegArg);
 
             Thread serviceThread;
             switch (sessionTypeArg)
@@ -65,12 +72,12 @@ namespace ArtemisMQ
                     if (addressArg == string.Empty) break;
                     if (retrySecondsArg == 0)
                     {
-                        serviceThread = new Thread(SendMessage);
+                        serviceThread = new Thread(() => SendMessage(producerConf));
                         serviceThread.Start();
                     }
                     else
                     {
-                        serviceThread = new Thread(RunSenderService);
+                        serviceThread = new Thread(() => RunSenderService(producerConf));
                         serviceThread.Start();
                     }
                     break;
@@ -79,19 +86,19 @@ namespace ArtemisMQ
 
                     if (retrySecondsArg == 0)
                     {
-                        serviceThread = new Thread(ReceiveMessage);
+                        serviceThread = new Thread(() => ReceiveMessage(consumerConf));
                         serviceThread.Start();
                     }
                     else
                     {
-                        serviceThread = new Thread(RunReceiverService);
+                        serviceThread = new Thread(() => RunReceiverService(consumerConf));
                         serviceThread.Start();
                     }
                     break;
             }
         }
 
-        private (int, int, string, string, RoutingType, DurabilityMode) ParseArguments()
+        private (int, int, string, string, RoutingType, DurabilityMode, bool) ParseArguments()
         {
             string[] args = Environment.GetCommandLineArgs();
 
@@ -101,63 +108,65 @@ namespace ArtemisMQ
             RoutingType rType = RoutingType.Multicast;
             int retrySeconds = 2;
             DurabilityMode dMode = DurabilityMode.Durable;
-
-            if (args.Length >= 8)
-            {
-                if (int.TryParse(args[3], out int sType))
-                {
-                    sessionType = sType;
-
-                    int.TryParse(args[4], out int retrySecondsInt);
-                    retrySeconds = retrySecondsInt;
-
-                    if (args[5] == "multicast") rType = RoutingType.Multicast;
-                    if (args[5] == "anycast") rType = RoutingType.Anycast;
-
-                    if (args[6] == "durable") dMode = DurabilityMode.Durable;
-                    if (args[6] == "nondurable") dMode = DurabilityMode.Nondurable;
-
-                    addressDest = args[7];
-                }
-            }
+            bool ackMode = false;
 
             if (args.Length >= 9)
             {
-                if (int.TryParse(args[3], out int sType))
-                {
-                    sessionType = sType;
+                if (args[3] == "sender") sessionType = 1;
+                if (args[3] == "receiver") sessionType = 2;
 
-                    int.TryParse(args[4], out int retrySecondsInt);
-                    retrySeconds = retrySecondsInt;
+                int.TryParse(args[4], out int retrySecondsInt);
+                retrySeconds = retrySecondsInt;
 
-                    if (args[5] == "multicast") rType = RoutingType.Multicast;
-                    if (args[5] == "anycast") rType = RoutingType.Anycast;
+                if (args[5] == "multicast") rType = RoutingType.Multicast;
+                if (args[5] == "anycast") rType = RoutingType.Anycast;
 
-                    if (args[6] == "durable") dMode = DurabilityMode.Durable;
-                    if (args[6] == "nondurable") dMode = DurabilityMode.Nondurable;
+                if (args[6] == "durable") dMode = DurabilityMode.Durable;
+                if (args[6] == "nondurable") dMode = DurabilityMode.Nondurable;
 
-                    addressDest = args[7];
-                    queueDest = args[8];
-                }
+                if (args[7] == "ack") ackMode = true;
+                if (args[7] == "noack") ackMode = false;
+
+                addressDest = args[8];
+
             }
 
-            return(sessionType, retrySeconds, addressDest, queueDest, rType, dMode);
+            if (args.Length >= 10)
+            {
+                if (args[3] == "sender") sessionType = 1;
+                if (args[3] == "receiver") sessionType = 2;
+
+                int.TryParse(args[4], out int retrySecondsInt);
+                retrySeconds = retrySecondsInt;
+
+                if (args[5] == "multicast") rType = RoutingType.Multicast;
+                if (args[5] == "anycast") rType = RoutingType.Anycast;
+
+                if (args[6] == "durable") dMode = DurabilityMode.Durable;
+                if (args[6] == "nondurable") dMode = DurabilityMode.Nondurable;
+
+                if (args[7] == "ack") ackMode = true;
+                if (args[7] == "noack") ackMode = false;
+
+                addressDest = args[8];
+                queueDest = args[9];
+            }
+
+            return (sessionType, retrySeconds, addressDest, queueDest, rType, dMode, ackMode);
         }
 
         // --------------------------------------------------------------------------------------------------
 
-        private async void RunSenderService()
+        private async void RunSenderService(ProducerConfiguration conf)
         {
             ArtemisSender newSender = new ArtemisSender();
 
-            ProducerConfiguration conf = newSender.CreateProducerConfiguration(addressArg, durabilityModeArg, routinTypegArg);
+            await newSender.CreateConnectionAsync();
+            await newSender.CreateProducerAsync(conf);
 
-            await newSender.CreateProducerAndConnectionAsync(conf, (string m) => { Debug.Log("Producer created. Address: " + m); });
-
-            while(true)
+            while (true)
             {
-                // Random timestamp message for debuging.
-                Message m = newSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
+                Message m = ArtemisSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
 
                 await newSender.SendMessageAsync(m, () => { Debug.Log("Message sent!"); });
 
@@ -165,43 +174,80 @@ namespace ArtemisMQ
             }
         }
 
-        private async void SendMessage()
+        private async void SendMessage(ProducerConfiguration conf)
         {
             ArtemisSender newSender = new ArtemisSender();
-            ProducerConfiguration conf = newSender.CreateProducerConfiguration(addressArg, durabilityModeArg, routinTypegArg);
-            await newSender.CreateProducerAndConnectionAsync(conf, (string m) => { Debug.Log("Producer created. Address: " + m); });
-            Message m = newSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
+
+            await newSender.CreateConnectionAsync();
+            await newSender.CreateProducerAsync(conf);
+
+            Message m = ArtemisSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
             await newSender.SendMessageAsync(m, () => { Debug.Log("Message sent!"); });
+
+            await newSender.DisposeProducerAndConnectionAsync(() => { Debug.Log("Closed connection and sender."); }); ;
         }
+
 
         // --------------------------------------------------------------------------------------------------
 
-        private async void RunReceiverService()
+        private async void RunReceiverService(ConsumerConfiguration conf)
         {
             ArtemisReceiver newReceiver = new ArtemisReceiver();
-            ConsumerConfiguration conf = newReceiver.CreateConsumerConfiguration(addressArg, queueArg, routinTypegArg);
 
-            await newReceiver.CreateConsumerAsync(conf, () => { Debug.Log($"Consumer created: {addressArg} {queueArg}"); });
+            await newReceiver.CreateConnectionAsync();
+            await newReceiver.CreateConsumerAsync(conf);
 
-            while(true)
+            while (true)
             {
-                await newReceiver.ReceiveMessageAsync((Message m) =>
+                if (ackModeArg == false)
                 {
-                    Debug.Log($"Message received: {m.GetBody<string>()}");
-                    
-                    /* ... */
-                });
+                    await newReceiver.ReceiveMessageAsync(false, (Message m) =>
+                    {
+                        Debug.Log($"Message received: {m.GetBody<string>()}");
+                        /* ... */
+                    });
+                }
+                else
+                {
+                    await newReceiver.ReceiveMessageAsync(true, (Message m) =>
+                    {
+                        Debug.Log($"Message received (ACK): {m.GetBody<string>()}");
+                        /* ... */
+                    });
+                }
 
                 Thread.Sleep(retrySecondsArg * 1000);
             }
         }
 
-        private async void ReceiveMessage()
+        private async void ReceiveMessage(ConsumerConfiguration conf)
         {
             ArtemisReceiver newReceiver = new ArtemisReceiver();
-            ConsumerConfiguration conf = newReceiver.CreateConsumerConfiguration(addressArg, queueArg, routinTypegArg);
-            await newReceiver.CreateConsumerAsync(conf, () => { Debug.Log($"Consumer created: {addressArg} {queueArg}"); });
-            await newReceiver.ReceiveMessageAsync((Message m) => { Debug.Log($"Message received: {m.GetBody<string>()}"); });
+
+            await newReceiver.CreateConnectionAsync();
+            await newReceiver.CreateConsumerAsync(conf);
+
+            if (ackModeArg == false)
+            {
+                await newReceiver.ReceiveMessageAsync(false, (Message m) =>
+                {
+                    Debug.Log($"Message received: {m.GetBody<string>()}");
+                    /* ... */
+                });
+            }
+            else
+            {
+                await newReceiver.ReceiveMessageAsync(true, (Message m) =>
+                {
+                    Debug.Log($"Message received (ACK): {m.GetBody<string>()}");
+                    /* ... */
+                });
+            }
+
+
+            await newReceiver.DisposeConsumerAndConnectionAsync(() => { Debug.Log("Closed connection and sender."); }); ;
         }
+
+        // --------------------------------------------------------------------------------------------------
     }
 }

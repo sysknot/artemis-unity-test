@@ -10,7 +10,7 @@ namespace ArtemisMQ
         private Endpoint artemisEndpoint = Endpoint.Create("localhost", 61616, "admin", "admin");
 
         // Interface for artemis connection.
-         private IConnection connection;
+        private IConnection connection;
 
         // Public event for connection.
         public event Action OnConnected;
@@ -21,27 +21,25 @@ namespace ArtemisMQ
         public IConnection GetConnection() => connection;
 
         // If we need to use different connections (users/roles, endpoints)
-        public void ConfigureEndpoint(string user = "admin", string password = "admin", string host="localhost", int port=61616)
+        public void ConfigureEndpoint(string user = "admin", string password = "admin", string host = "localhost", int port = 61616)
         {
             artemisEndpoint = Endpoint.Create(host, port, user, password);
         }
 
-        // Main connection method. Can be used asynchronously
+        public void ConfigureEndpoint(Endpoint newEndpoint)
+        {
+            artemisEndpoint = newEndpoint;
+        }
+
         public async Task OpenConnectionAsync()
         {
             var connectionFactory = new ConnectionFactory();
             connection = await connectionFactory.CreateAsync(artemisEndpoint);
-            // We call the event
-            OnConnected?.Invoke();
         }
 
-        // Dispose the object (producer/consumer) and close connection.
         public async Task CloseConnectionAsync()
         {
             await connection.DisposeAsync();
-
-            // Finally call the event
-            OnDisconnected?.Invoke();
         }
     }
 
