@@ -107,14 +107,12 @@ namespace ArtemisMQ
         /// <param name="dMode">Durability mode configuration</param>
         /// <param name="rType">Sender address routing type</param>
         /// <returns></returns>
-        public static ProducerConfiguration CreateProducerConfiguration(string address, DurabilityMode dMode = DurabilityMode.Nondurable, RoutingType rType = RoutingType.Multicast)
+        public static ProducerConfiguration CreateProducerConfiguration(string address, DurabilityMode? dMode = null, RoutingType? rType = null)
         {
             var producerConfiguration = new ProducerConfiguration();
             producerConfiguration.Address = address;
-            producerConfiguration.RoutingType = rType;
-
-            // May override each message durabilityMode
-            producerConfiguration.MessageDurabilityMode = dMode;
+            if (rType!=null) producerConfiguration.RoutingType = rType;
+            if (dMode != null) producerConfiguration.MessageDurabilityMode = dMode;
 
             return producerConfiguration;
         }

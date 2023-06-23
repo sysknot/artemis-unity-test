@@ -5,44 +5,14 @@ using System;
 using ActiveMQ.Artemis.Client;
 
 /*
-    ESC#1:
-    Multicast.
+    // more parameters.
+    // -routingType <multicast/anycast> -durabilityMode <durable/nondurable>  
 
-    Sender:
-    cls && artemis-server-client.exe -batchmode -nographics sender 5 multicast nondurable noack user.login.test
-
-    Receiver:
-    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack user.login.test
-
-    ------------------------------------------------------------------------------
-
-    ESC#2:
-    Anycast.
-
-    Sender:
-    cls && artemis-server-client.exe -batchmode -nographics sender 5 anycast nondurable noack user.login.test2
-
-
-    Receiver:
-    cls && artemis-server-client.exe -batchmode -nographics receiver 0 anycast nondurable noack user.login.test2
-    cls && artemis-server-client.exe -batchmode -nographics receiver 0 anycast nondurable ack user.login.test2
-
-    cls && artemis-server-client.exe -batchmode -nographics receiver 2 anycast nondurable noack user.login.test2
-    cls && artemis-server-client.exe -batchmode -nographics receiver 2 anycast nondurable noack user.login.test2
-
-    ------------------------------------------------------------------------------
-
-    ESC#3:
-    Wildcards.
-
-    Sender:
-    cls && artemis-server-client.exe -batchmode -nographics sender 5 multicast nondurable noack user.login.test
-
-    Receiver:
-    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack *.login.test
-    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack *.login.*
-    cls && artemis-server-client.exe -batchmode -nographics receiver 2 multicast nondurable noack #.test
-
+    artemis-server-client.exe -batchmode -nographics -clientMode sender -address test.login -interval 2
+    
+    artemis-server-client.exe -batchmode -nographics -clientMode receiver -address test.login -queue q1 -interval 2 -ack ack
+    artemis-server-client.exe -batchmode -nographics -clientMode receiver -address test.login -queue q1 -interval 2 -ack ack
+    artemis-server-client.exe -batchmode -nographics -clientMode receiver -address test.login -queue q2 -interval 2 -ack ack
  */
 
 namespace ArtemisMQ
@@ -52,10 +22,10 @@ namespace ArtemisMQ
     {
         private int sessionTypeArg; // 1 producer , 2 consumer
         private string addressArg;
-        private string queueArg;
+        private string? queueArg;
         private int retrySecondsArg;
-        private RoutingType routinTypegArg;
-        private DurabilityMode durabilityModeArg;
+        private RoutingType? routinTypegArg;
+        private DurabilityMode? durabilityModeArg;
         private bool ackModeArg;
 
         private void Start()
@@ -98,58 +68,53 @@ namespace ArtemisMQ
             }
         }
 
-        private (int, int, string, string, RoutingType, DurabilityMode, bool) ParseArguments()
+        private (int, int, string, string?, RoutingType?, DurabilityMode?, bool) ParseArguments()
         {
             string[] args = Environment.GetCommandLineArgs();
 
             int sessionType = 0;
-            string addressDest = "";
-            string queueDest = "";
-            RoutingType rType = RoutingType.Multicast;
+            string addressDest = "empty";
+            string? queueDest = null;
+            RoutingType? rType = null;
+            DurabilityMode? dMode = null;
             int retrySeconds = 2;
-            DurabilityMode dMode = DurabilityMode.Durable;
             bool ackMode = false;
 
-            if (args.Length >= 9)
+            for (int i = 0; i < args.Length; i++)
             {
-                if (args[3] == "sender") sessionType = 1;
-                if (args[3] == "receiver") sessionType = 2;
-
-                int.TryParse(args[4], out int retrySecondsInt);
-                retrySeconds = retrySecondsInt;
-
-                if (args[5] == "multicast") rType = RoutingType.Multicast;
-                if (args[5] == "anycast") rType = RoutingType.Anycast;
-
-                if (args[6] == "durable") dMode = DurabilityMode.Durable;
-                if (args[6] == "nondurable") dMode = DurabilityMode.Nondurable;
-
-                if (args[7] == "ack") ackMode = true;
-                if (args[7] == "noack") ackMode = false;
-
-                addressDest = args[8];
-
-            }
-
-            if (args.Length >= 10)
-            {
-                if (args[3] == "sender") sessionType = 1;
-                if (args[3] == "receiver") sessionType = 2;
-
-                int.TryParse(args[4], out int retrySecondsInt);
-                retrySeconds = retrySecondsInt;
-
-                if (args[5] == "multicast") rType = RoutingType.Multicast;
-                if (args[5] == "anycast") rType = RoutingType.Anycast;
-
-                if (args[6] == "durable") dMode = DurabilityMode.Durable;
-                if (args[6] == "nondurable") dMode = DurabilityMode.Nondurable;
-
-                if (args[7] == "ack") ackMode = true;
-                if (args[7] == "noack") ackMode = false;
-
-                addressDest = args[8];
-                queueDest = args[9];
+                if (args[i] == "-clientMode" && i + 1 < args.Length)
+                {
+                    if (args[i + 1] == "sender") sessionType = 1;
+                    if (args[i + 1] == "receiver") sessionType = 2;
+                }
+                else if (args[i] == "-address" && i + 1 < args.Length)
+                {
+                    addressDest = args[i + 1];
+                }
+                else if (args[i] == "-queue" && i + 1 < args.Length)
+                {
+                    queueDest = args[i + 1];
+                }
+                else if (args[i] == "-routingType" && i + 1 < args.Length)
+                {
+                    if (args[i + 1] == "multicast") rType = RoutingType.Multicast;
+                    if (args[i + 1] == "anycast") rType = RoutingType.Anycast;
+                }
+                else if (args[i] == "-ack" && i + 1 < args.Length)
+                {
+                    if (args[i + 1] == "ack") ackMode = true;
+                    if (args[i + 1] == "noack") ackMode = false;
+                } 
+                else if (args[i] == "-durabilityMode" && i + 1 < args.Length)
+                {
+                    if (args[i + 1] == "durable") dMode = DurabilityMode.Durable;
+                    if (args[i + 1] == "nondurable") dMode = DurabilityMode.Nondurable;
+                }
+                else if (args[i] == "-interval" && i + 1 < args.Length)
+                {
+                    int.TryParse(args[i + 1], out int retrySecondsInt);
+                    retrySeconds = retrySecondsInt;
+                }
             }
 
             return (sessionType, retrySeconds, addressDest, queueDest, rType, dMode, ackMode);
