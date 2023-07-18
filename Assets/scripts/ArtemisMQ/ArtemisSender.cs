@@ -107,7 +107,7 @@ namespace ArtemisMQ
         /// <param name="dMode">Durability mode configuration</param>
         /// <param name="rType">Sender address routing type</param>
         /// <returns></returns>
-        public static ProducerConfiguration CreateProducerConfiguration(string address, DurabilityMode? dMode = null, RoutingType? rType = null)
+        public static ProducerConfiguration CreateProducerConfiguration(string address, RoutingType? rType = null, DurabilityMode? dMode = null)
         {
             var producerConfiguration = new ProducerConfiguration();
             producerConfiguration.Address = address;

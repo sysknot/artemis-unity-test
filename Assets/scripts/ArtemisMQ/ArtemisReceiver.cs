@@ -67,15 +67,17 @@ namespace ArtemisMQ
         /// <param name="queue">Queue for suscribe inside the address</param>
         /// <param name="rType">Routing type - Multicast by default (Anycast/Multicast)</param>
         /// <returns></returns>
-        public static ConsumerConfiguration CreateConsumerConfiguration(string address, string? queue = null, RoutingType? rType = null)
+        public static ConsumerConfiguration CreateConsumerConfiguration(string address, string? queue = null, RoutingType? rType = null, DurabilityMode? dMode = null)
         {
             var consumerConfiguration = new ConsumerConfiguration();
             consumerConfiguration.Address = address;
+            consumerConfiguration.Durable = false;
             
             if (queue != null) consumerConfiguration.Queue = queue;
             if (rType != null) consumerConfiguration.RoutingType = rType;
+            if (dMode != null && dMode == DurabilityMode.Durable) consumerConfiguration.Durable = true;
+
             // Unused attributes
-            // consumerConfiguration.Durable = durable;
             // consumerConfiguration.Credit = credit
 
             return consumerConfiguration;

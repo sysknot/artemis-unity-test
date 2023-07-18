@@ -7,6 +7,7 @@ using ActiveMQ.Artemis.Client;
 /*
     // more parameters.
     // -routingType <multicast/anycast> -durabilityMode <durable/nondurable>  
+    // -message <string>
 
     artemis-server-client.exe -batchmode -nographics -clientMode sender -address test.login -interval 2
     
@@ -27,13 +28,14 @@ namespace ArtemisMQ
         private RoutingType? routinTypegArg;
         private DurabilityMode? durabilityModeArg;
         private bool ackModeArg;
+        private string messageArg;
 
         private void Start()
         {
-            (sessionTypeArg, retrySecondsArg, addressArg, queueArg, routinTypegArg, durabilityModeArg, ackModeArg) = ParseArguments();
+            (sessionTypeArg, retrySecondsArg, addressArg, queueArg, routinTypegArg, durabilityModeArg, ackModeArg, messageArg) = ParseArguments();
 
-            ProducerConfiguration producerConf = ArtemisSender.CreateProducerConfiguration(addressArg, durabilityModeArg, routinTypegArg);
-            ConsumerConfiguration consumerConf = ArtemisReceiver.CreateConsumerConfiguration(addressArg, queueArg, routinTypegArg);
+            ProducerConfiguration producerConf = ArtemisSender.CreateProducerConfiguration(addressArg, routinTypegArg, durabilityModeArg);
+            ConsumerConfiguration consumerConf = ArtemisReceiver.CreateConsumerConfiguration(addressArg, queueArg, routinTypegArg, durabilityModeArg);
 
             Thread serviceThread;
             switch (sessionTypeArg)
@@ -42,12 +44,12 @@ namespace ArtemisMQ
                     if (addressArg == string.Empty) break;
                     if (retrySecondsArg == 0)
                     {
-                        serviceThread = new Thread(() => SendMessage(producerConf));
+                        serviceThread = new Thread(() => SendMessage(producerConf, messageArg));
                         serviceThread.Start();
                     }
                     else
                     {
-                        serviceThread = new Thread(() => RunSenderService(producerConf));
+                        serviceThread = new Thread(() => RunSenderService(producerConf, messageArg));
                         serviceThread.Start();
                     }
                     break;
@@ -68,7 +70,7 @@ namespace ArtemisMQ
             }
         }
 
-        private (int, int, string, string?, RoutingType?, DurabilityMode?, bool) ParseArguments()
+        private (int, int, string, string?, RoutingType?, DurabilityMode?, bool, string) ParseArguments()
         {
             string[] args = Environment.GetCommandLineArgs();
 
@@ -79,6 +81,7 @@ namespace ArtemisMQ
             DurabilityMode? dMode = null;
             int retrySeconds = 2;
             bool ackMode = false;
+            string message = string.Empty;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -115,14 +118,18 @@ namespace ArtemisMQ
                     int.TryParse(args[i + 1], out int retrySecondsInt);
                     retrySeconds = retrySecondsInt;
                 }
+                else if (args[i] == "-message" && i +1 < args.Length)
+                {
+                    message = args[i + 1];
+                }
             }
 
-            return (sessionType, retrySeconds, addressDest, queueDest, rType, dMode, ackMode);
+            return (sessionType, retrySeconds, addressDest, queueDest, rType, dMode, ackMode, message);
         }
 
         // --------------------------------------------------------------------------------------------------
 
-        private async void RunSenderService(ProducerConfiguration conf)
+        private async void RunSenderService(ProducerConfiguration conf, string message)
         {
             ArtemisSender newSender = new ArtemisSender();
 
@@ -131,7 +138,8 @@ namespace ArtemisMQ
 
             while (true)
             {
-                Message m = ArtemisSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
+                // Message m = ArtemisSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
+                Message m = ArtemisSender.CreateMessage(message);
 
                 await newSender.SendMessageAsync(m, () => { Debug.Log("Message sent!"); });
 
@@ -139,14 +147,16 @@ namespace ArtemisMQ
             }
         }
 
-        private async void SendMessage(ProducerConfiguration conf)
+        private async void SendMessage(ProducerConfiguration conf, string message)
         {
             ArtemisSender newSender = new ArtemisSender();
 
             await newSender.CreateConnectionAsync();
             await newSender.CreateProducerAsync(conf);
 
-            Message m = ArtemisSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
+            // Message m = ArtemisSender.CreateMessage($"Message: {DateTime.Now.ToString("HH:mm:ss")}");
+            Message m = ArtemisSender.CreateMessage(message);
+
             await newSender.SendMessageAsync(m, () => { Debug.Log("Message sent!"); });
 
             await newSender.DisposeProducerAndConnectionAsync(() => { Debug.Log("Closed connection and sender."); }); ;
